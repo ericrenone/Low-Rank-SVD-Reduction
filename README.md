@@ -1,6 +1,6 @@
 # Low-Rank-SVD-Reduction
 The script generates a synthetic low-rank matrix with noise, computes the optimal rank-k approximation, reports reconstruction error, and visualizes the singular value spectrum.
-Demonstrates the **optimal low-rank approximation** of matrices via truncated SVD — and how Gaussian noise degrades recovery of the underlying signal. Implements full, truncated, and randomized SVD methods with numerical safeguards and error analysis.
+Demonstrates the **optimal low-rank approximation** of matrices via truncated SVD — and how Gaussian noise degrades recovery of the underlying signal. Implements full, truncated, and randomized SVD methods with numerical safeguards/error analysis.
 
 ## Mathematical Background
 
