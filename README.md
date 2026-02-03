@@ -4,17 +4,9 @@ Demonstrates the **optimal low-rank approximation** of matrices via truncated SV
 
 ## Mathematical Background
 
-Given clean low-rank signal **L** ∈ ℝ^{m × n} with rank *r*, and additive Gaussian noise **E** ∼ 𝒩(0, σ² I),
-
-**A** = **L** + **E**
-
 The Eckart–Young–Mirsky theorem states that the **best rank-*k* approximation** Âₖ (in Frobenius or operator norm) is given by the truncated SVD keeping the *k* largest singular values/vectors.
 
-We study reconstruction error
-
-**err_F(k, σ) = ‖A − Âₖ‖_F / ‖A‖_F**
-
-and observe the typical U-shaped curve: error decreases until *k* ≈ *r*, then rises as noise overfitting dominates.
+We study reconstruction error and observe the typical U-shaped curve: error decreases until *k* ≈ *r*, then rises as noise overfitting dominates.
 
 ## Features
 
