@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""
+Low-Rank SVD Reduction Demo
+
+A concise, reproducible demonstration of low-rank matrix approximation
+using truncated Singular Value Decomposition (SVD).
+
+The script generates a synthetic low-rank matrix with noise, computes the
+optimal rank-k approximation, reports reconstruction error, and visualizes
+the singular value spectrum.
+
+Author: Eric Ren
+License: MIT
+
+Requirements: numpy, scipy, matplotlib
+
+To run doctests: python -m doctest this_file.py
+"""
+
+from __future__ import annotations
+
+__version__ = "0.1.0"
+
+import argparse
+import sys
+from typing import Optional, Tuple
+
+import numpy as np
+from scipy.linalg import svd
+import matplotlib.pyplot as plt
+
+
+def generate_low_rank_matrix(
+    m: int,
+    n: int,
+    rank: int,
+    noise_std: float,
+    seed: Optional[int],
+) -> np.ndarray:
+    """Generate an approximately rank-`rank` matrix with Gaussian noise."""
+    if seed is not None:
+        np.random.seed(seed)
+
+    U = np.random.randn(m, rank)
+    V = np.random.randn(n, rank)
+
+    eps = np.finfo(np.float64).eps
+    U /= np.linalg.norm(U, axis=0, keepdims=True) + eps
+    V /= np.linalg.norm(V, axis=0, keepdims=True) + eps
+
+    A = U @ V.T
+    if noise_std > 0:
+        A += noise_std * np.random.randn(m, n)
+
+    return A
+
+
+def truncated_svd(
+    A: np.ndarray, k: int
+) -> Tuple[np.ndarray, float, np.ndarray]:
+    """
+    Compute the optimal rank-k approximation of A using truncated SVD.
+
+    Returns:
+        A_k      rank-k approximation
+        residual Frobenius norm ||A - A_k||
+        s        full singular value spectrum
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> A = np.diag([1.0, 0.5, 0.1])
+    >>> A_k, res, s = truncated_svd(A, 2)
+    >>> np.allclose(s, [1.0, 0.5, 0.1])
+    True
+    >>> np.allclose(A_k, np.diag([1.0, 0.5, 0.0]), atol=1e-14)
+    True
+    >>> np.isclose(res, 0.1)
+    True
+    """
+    U, s, Vh = svd(A, full_matrices=False)
+    k_orig = k
+    k = min(k, len(s))
+    if k < k_orig:
+        print(f"Warning: Target rank reduced to {k} due to matrix dimensions.", file=sys.stderr)
+
+    A_k = U[:, :k] @ np.diag(s[:k]) @ Vh[:k]
+    residual = np.linalg.norm(A - A_k, ord="fro")
+
+    return A_k, residual, s
+
+
+def plot_spectrum(
+    s: np.ndarray,
+    rank: int,
+    save_path: Optional[str] = None,
+    show: bool = True,
+) -> None:
+    """Plot the singular value spectrum on a log scale."""
+    plt.figure(figsize=(9, 5))
+    plt.semilogy(s, "o-", lw=1.2, ms=4)
+    plt.axvline(rank, ls="--", lw=1.5, label="target rank")
+    plt.xlabel("Index")
+    plt.ylabel("Singular value (log scale)")
+    plt.title("Singular Value Spectrum")
+    plt.grid(True, which="both", alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path)
+    if show:
+        plt.show()
+
+
+def run_demo(
+    m: int,
+    n: int,
+    true_rank: int,
+    target_rank: int,
+    noise_std: float,
+    seed: Optional[int],
+    show_plot: bool,
+    save_plot: Optional[str] = None,
+) -> None:
+    """Run the complete low-rank SVD demonstration."""
+    A = generate_low_rank_matrix(m, n, true_rank, noise_std, seed)
+    A_k, residual, s = truncated_svd(A, target_rank)
+
+    rel_residual = residual / np.linalg.norm(A, ord="fro")
+
+    print("\nLow-Rank SVD Reduction Demo")
+    print("-" * 44)
+    print(f"Matrix shape      : {m} × {n}")
+    print(f"True rank         : {true_rank}")
+    print(f"Target rank       : {target_rank}")
+    print(f"Noise std         : {noise_std}")
+    print(f"Frobenius error   : {residual:.3e}")
+    print(f"Relative error    : {rel_residual:.3e} ({rel_residual*100:.2f}%)")
+
+    if show_plot or save_plot:
+        plot_spectrum(s, target_rank, save_path=save_plot, show=show_plot)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Low-rank SVD reduction demo")
+    parser.add_argument("--m", type=int, default=1800)
+    parser.add_argument("--n", type=int, default=600)
+    parser.add_argument("--true-rank", type=int, default=32)
+    parser.add_argument("--target-rank", type=int, default=32)
+    parser.add_argument("--noise", type=float, default=0.015)
+    parser.add_argument("--seed", type=int, default=20260202)
+    parser.add_argument("--no-plot", action="store_true")
+    parser.add_argument("--save-plot", type=str, default=None, help="File to save plot to (e.g., spectrum.pdf)")
+    args = parser.parse_args()
+
+    seed = args.seed if args.seed >= 0 else None
+
+    try:
+        run_demo(
+            m=args.m,
+            n=args.n,
+            true_rank=args.true_rank,
+            target_rank=args.target_rank,
+            noise_std=args.noise,
+            seed=seed,
+            show_plot=not args.no_plot,
+            save_plot=args.save_plot,
+        )
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
