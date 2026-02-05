@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+from __future__ import annotations
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
+from scipy.linalg import svd
+
+# Robust style selection for 2026 environments
+try:
+    plt.style.use('ggplot')
+except:
+    plt.style.use('bmh')
+
+plt.rcParams.update({'font.family': 'sans-serif', 'font.size': 10})
+
+class SVDRippleLab:
+    def __init__(self, size: int = 128):
+        self.size = size
+        self.rng = np.random.default_rng(2026)
+        
+        # 1. Generate Signal: Wave Interference Pattern
+        x = np.linspace(-4, 4, self.size)
+        X, Y = np.meshgrid(x, x)
+        # Create a complex "ripple" pattern using multi-frequency sines
+        self.L_clean = (np.sin(X**2 + Y**2) / (1 + 0.5*(X**2 + Y**2)))
+        
+        self.sigma = 0.12
+        self.noise = self.sigma * self.rng.standard_normal(self.L_clean.shape)
+        self.A_noisy = self.L_clean + self.noise
+        
+        # 2. SVD Decomposition
+        self.U, self.s, self.Vh = svd(self.A_noisy, full_matrices=False)
+        self.energy_cumulative = np.cumsum(self.s**2) / np.sum(self.s**2)
+        
+        # 3. Figure Layout: 3D Recovery vs 2D Residual Error
+        self.fig = plt.figure(figsize=(16, 8))
+        self.fig.canvas.manager.set_window_title('SVD Harmonic Reconstruction Analysis')
+        
+        self.ax_3d = self.fig.add_subplot(1, 2, 1, projection='3d')
+        self.ax_err = self.fig.add_subplot(1, 2, 2)
+        plt.subplots_adjust(bottom=0.2, wspace=0.15)
+        
+        # 4. Interactive Slider (Up to 100 components)
+        ax_rank = plt.axes([0.2, 0.08, 0.6, 0.03])
+        self.slider = Slider(ax_rank, 'Rank (k)', 1, 100, valinit=5, valfmt='%d')
+        self.slider.on_changed(self.update)
+        
+        self.update(5)
+
+    def update(self, val):
+        k = int(self.slider.val)
+        # Rank-k reconstruction
+        A_k = (self.U[:, :k] * self.s[:k]) @ self.Vh[:k, :]
+        
+        # Calculate Residual (What we are losing/filtering out)
+        Residual = self.A_noisy - A_k
+        
+        # Plot 1: 3D Surface Reconstruction
+        self.ax_3d.clear()
+        x_grid = np.arange(self.size)
+        X_g, Y_g = np.meshgrid(x_grid, x_grid)
+        # Use striding [::2] to keep interaction fluid
+        self.ax_3d.plot_surface(X_g[::2, ::2], Y_g[::2, ::2], A_k[::2, ::2], 
+                                cmap='viridis', antialiased=True)
+        self.ax_3d.set_title(f"Rank-{k} Harmonic Recovery", fontweight='bold')
+        self.ax_3d.set_zlim(-1.0, 1.0)
+        self.ax_3d.axis('off')
+        
+        # Plot 2: Residual Error Map (Heatmap)
+        self.ax_err.clear()
+        im = self.ax_err.imshow(Residual, cmap='coolwarm', vmin=-0.5, vmax=0.5)
+        self.ax_err.set_title(f"Residual Error (Noisy - Rank {k})", fontsize=12)
+        self.ax_err.set_xticks([])
+        self.ax_err.set_yticks([])
+        
+        # Energy Annotation
+        energy = self.energy_cumulative[k-1] * 100
+        self.ax_err.text(0.05, 0.05, f"Energy Retained: {energy:.2f}%", 
+                         transform=self.ax_err.transAxes, color='black', 
+                         bbox=dict(facecolor='white', alpha=0.8))
+        
+        # PhD Aligned Console Feedback
+        mse = np.mean((self.L_clean - A_k)**2)
+        print(f"Rank: {k:3d} | Information: {energy:6.2f}% | Reconstruction MSE: {mse:.6f}")
+        
+        self.fig.canvas.draw_idle()
+
+if __name__ == "__main__":
+    print(f"{'='*60}")
+    print(f"{'SVD INTERFERENCE & RESIDUAL LAB':^60}")
+    print(f"{'='*60}")
+    lab = SVDRippleLab()
+    plt.show()
