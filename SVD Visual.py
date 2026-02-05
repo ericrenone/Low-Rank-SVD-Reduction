@@ -87,7 +87,8 @@ class SVDEducator:
 
 if __name__ == "__main__":
     print(f"{'='*60}")
-    print(f"{'SVD PhD LEARNING LAB: NO-WARNING EDITION':^60}")
+    print(f"{'SVD LEARNING LAB: NO-WARNING EDITION':^60}")
     print(f"{'='*60}")
     lab = SVDEducator()
+
     plt.show()
