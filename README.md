@@ -1,9 +1,49 @@
 # Low-Rank-SVD-Reduction
-An interactive, high-fidelity environment for real-time Singular Value Decomposition (SVD) analysis and topological signal recovery.
 
-Demonstrates the **optimal low-rank approximation** of matrices via truncated SVD and how Gaussian noise degrades recovery of the underlying signal. 
-Implements full, truncated, and randomized SVD methods with numerical safeguards/error analysis.
+**An interactive, high-fidelity environment for real-time Singular Value Decomposition (SVD) analysis and topological signal recovery.**
 
-## Summary
+This project demonstrates the **optimal low-rank approximation** of matrices via truncated SVD, illustrating how Gaussian noise degrades the recovery of the underlying signal. It implements **full, truncated, and randomized SVD methods** with numerical safeguards and error analysis.
 
-Low-Rank SVD Reduction & RecoveryThis environment explores the intersection of linear algebra and signal processing through the lens of Singular Value Decomposition (SVD). It provides a real-time laboratory for observing how matrices can be compressed and denoised by manipulating their spectral components.Theoretical Core: The Eckart–Young–Mirsky TheoremThe theorem provides the mathematical proof that SVD is the optimal method for data reduction. It states that for any matrix A, the best possible approximation of rank k is found by keeping only the top k singular values and setting the rest to zero.Optimal Approximation: No other linear combination of $k$ components can result in a smaller error (measured by Frobenius or Spectral norms).Information Hierarchy: SVD acts as a natural "sorting" algorithm, placing the most important structural data in the first few singular values and relegating random noise to the "tail" of the spectrum.
+---
+
+## Mathematical Background
+
+### Eckart–Young–Mirsky Theorem
+The theorem guarantees that the **best rank-*k* approximation** of a matrix \( A \) (in Frobenius or spectral norm) is given by the **truncated SVD**, retaining only the *k* largest singular values and vectors.
+
+- **Optimal Compression**: No other rank-*k* matrix can approximate \( A \) with lower error.
+- **Denoising**: Truncating the SVD discards noise-dominated components, recovering the true signal.
+
+---
+
+### Reconstruction Error Dynamics
+We analyze the **reconstruction error** \( \|A - \hat{A}_k\| \) and observe:
+
+1. **Underfitting** (*k < true rank*): Error decreases as more signal components are included.
+2. **Optimal Recovery** (*k ≈ true rank*): Error is minimized, and the signal is fully recovered.
+3. **Overfitting** (*k > true rank*): Error relative to the **clean signal** increases as noise components are included, leading to a **U-shaped error curve** when comparing to the ground truth.
+
+---
+
+## Key Features
+
+- **Real-Time 3D Visualization**: Interactive exploration of rank-*k* approximations.
+- **Error Analysis**: Quantitative metrics (MSE, Frobenius norm) to assess reconstruction quality.
+- **Numerical Safeguards**: Robust handling of large matrices (1000×1000) with optimized striding for performance.
+
+---
+
+## Applications
+
+- **Dimensionality Reduction**: Compress large datasets while preserving structure.
+- **Denoising**: Filter out Gaussian noise from signals.
+- **Latent Feature Extraction**: Identify dominant patterns in high-dimensional data.
+
+---
+
+## Implementation
+
+- **Full SVD**: Baseline spectral analysis.
+- **Truncated SVD**: Optimal hard thresholding for denoising.
+- **Randomized SVD**: High-speed approximation for massive datasets.
+
