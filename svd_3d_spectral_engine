@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+
+
+from __future__ import annotations
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
+from scipy.linalg import svd
+
+# --- 2026 Compatible UI Styling ---
+plt.style.use('dark_background') # Better contrast for 3D surfaces
+plt.rcParams.update({'font.family': 'sans-serif', 'font.size': 9})
+
+class SVD3DEngine:
+    def __init__(self, size: int = 1000):
+        self.size = size
+        self.rng = np.random.default_rng(2026)
+        
+        # 1. Generate High-Fidelity Signal (Multi-Modal Harmonics)
+        x = np.linspace(-4, 4, size)
+        X, Y = np.meshgrid(x, x)
+        self.L_clean = (np.cos(X) * np.exp(-X**2/8) * np.sin(Y) * np.exp(-Y**2/8))
+        
+        # 2. Inject White Noise Floor
+        self.sigma = 0.15
+        self.A_noisy = self.L_clean + self.sigma * self.rng.standard_normal((size, size))
+        
+        # 3. Perform Initial SVD (The "Engine" Data)
+        print(f"Engine Initializing: Decomposing {size}x{size} spectral data...")
+        self.U, self.s, self.Vh = svd(self.A_noisy, full_matrices=False)
+        
+        # 4. Interface Construction
+        self.fig = plt.figure(figsize=(12, 9))
+        self.fig.canvas.manager.set_window_title('Real-Time SVD Topological Engine')
+        self.ax = self.fig.add_subplot(111, projection='3d')
+        
+        # Position slider at the bottom
+        ax_slide = plt.axes([0.2, 0.05, 0.6, 0.03], facecolor='#222222')
+        self.slider = Slider(
+            ax_slide, 'Spectral Rank', 1, 150, 
+            valinit=10, valfmt='%d', color='#00ffcc'
+        )
+        self.slider.on_changed(self.update)
+        
+        self.update(10)
+
+    def update(self, val):
+        k = int(self.slider.val)
+        
+        # Optimized Rank-k Approximation
+        # A_k = U_k * s_k * Vh_k
+        A_k = (self.U[:, :k] * self.s[:k]) @ self.Vh[:k, :]
+        
+        # Real-Time 3D Rendering (Intelligent Striding for speed)
+        self.ax.clear()
+        
+        # Sample every 15th point to ensure 60fps-like interactivity 
+        # while maintaining visual topology
+        stride = 15
+        x_g, y_g = np.meshgrid(np.arange(0, self.size, stride), 
+                               np.arange(0, self.size, stride))
+        
+        surf = self.ax.plot_surface(
+            x_g, y_g, A_k[::stride, ::stride], 
+            cmap='plasma', 
+            antialiased=True,
+            rcount=100, ccount=100 # Internal limit for render stability
+        )
+        
+        # Visual Polish
+        self.ax.set_zlim(-1, 1)
+        self.ax.set_title(f"3D RECONSTRUCTION: RANK {k}", color='#00ffcc', fontsize=14, pad=20)
+        self.ax.axis('off')
+        self.ax.view_init(elev=35, azim=45) # Optimal viewing angle
+        
+        # Performance Metric
+        mse = np.mean((self.L_clean - A_k)**2)
+        print(f"Rank: {k:3d} | MSE: {mse:.8f} | Render Resolution: {1000//stride}x{1000//stride}")
+        
+        self.fig.canvas.draw_idle()
+
+if __name__ == "__main__":
+    print("\n" + "="*50)
+    print(" SVD 3D VISUAL ENGINE ACTIVATED ".center(50))
+    print("="*50 + "\n")
+    engine = SVD3DEngine()
+    plt.show()
