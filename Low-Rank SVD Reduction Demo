@@ -1,221 +1,108 @@
 #!/usr/bin/env python3
-"""
-Low-Rank SVD Demo with Noise – 2026 Edition
-───────────────────────────────────────────
-Demonstrates the Eckart–Young–Mirsky theorem: optimal low-rank approximation
-via truncated SVD, and how Gaussian noise affects signal recovery.
+# -*- coding: utf-8 -*-
 
-Features:
-- Uses scipy.sparse.linalg.svds (truncated & efficient)
-- Defensive numerics (eps handling, dimension checks)
-- Reproducible with seed
-- CLI with sensible defaults
-- Doctests + relative & normalized errors
-- Singular value spectrum plot (log scale)
 
-Author: Eric Ren
-License: MIT
-Version: 0.2.0 (2026 style)
-"""
 from __future__ import annotations
 
-__version__ = "0.2.0"
-
-import argparse
 import sys
-import warnings
-from typing import Optional, Tuple
-
 import numpy as np
 from scipy.sparse.linalg import svds
 from scipy.linalg import svd
 import matplotlib.pyplot as plt
 
+# Using a professional style for 2026 visuals
+plt.style.use('seaborn-v0_8-muted') 
 
 def generate_low_rank_matrix(
     m: int,
     n: int,
     rank: int,
     noise_std: float = 0.0,
-    seed: Optional[int] = None,
+    rng: np.random.Generator = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Generate low-rank signal + noisy observation.
+    """Generate a true low-rank signal with orthonormal bases."""
+    if rng is None:
+        rng = np.random.default_rng()
 
-    Returns:
-        A       noisy matrix (what we observe)
-        L_clean clean low-rank signal (for benchmarking)
-    """
-    if seed is not None:
-        np.random.seed(seed)
+    # Orthonormal bases via QR decomposition
+    U, _ = np.linalg.qr(rng.standard_normal((m, rank)))
+    V, _ = np.linalg.qr(rng.standard_normal((n, rank)))
+    
+    # Singular values: strong signal to ensure it stands above noise
+    s = np.logspace(2, 0.5, rank) 
+    L_clean = (U * s) @ V.T
 
-    U = np.random.randn(m, rank)
-    V = np.random.randn(n, rank)
-
-    # Normalize columns to prevent extreme scaling
-    eps = np.finfo(np.float64).eps
-    U /= np.linalg.norm(U, axis=0, keepdims=True) + eps
-    V /= np.linalg.norm(V, axis=0, keepdims=True) + eps
-
-    L_clean = U @ V.T
     A = L_clean.copy()
-
     if noise_std > 0:
-        A += noise_std * np.random.randn(m, n)
+        A += noise_std * rng.standard_normal((m, n))
 
     return A, L_clean
 
+def get_optimal_threshold(m: int, n: int, sigma: float) -> float:
+    """Gavish-Donoho Optimal Hard Threshold for unknown noise variance."""
+    beta = min(m, n) / max(m, n)
+    omega = 0.56 * beta**3 - 0.95 * beta**2 + 1.82 * beta + 1.43
+    return omega * sigma * np.sqrt(max(m, n))
 
-def truncated_svd_approx(
-    A: np.ndarray,
-    k: int,
-) -> tuple[np.ndarray, float, np.ndarray]:
-    """
-    Compute rank-k approximation using truncated SVD (svds when possible).
+def plot_results(s: np.ndarray, threshold: float, true_rank: int, est_rank: int):
+    """Visualizes the singular value decay with high-fidelity formatting."""
+    fig, ax = plt.subplots(figsize=(11, 6), constrained_layout=True)
+    
+    # Plot all singular values
+    ax.semilogy(s, 'o', ms=3, color='#2c3e50', alpha=0.4, label='Singular Values (Spectrum)')
+    
+    # Highlight the values above the threshold
+    ax.semilogy(s[:est_rank], 'o', ms=5, color='#e74c3c', label='Recovered Signal')
+    
+    # Threshold and Rank lines
+    ax.axhline(threshold, color='#2980b9', ls='--', lw=2, label=f'Optimal Threshold (τ)')
+    ax.axvline(true_rank, color='#27ae60', ls=':', lw=2, label=f'True Rank ({true_rank})')
+    
+    ax.set_title("SVD Spectrum Analysis & Automated Denoising", fontsize=14, pad=15)
+    ax.set_xlabel("Singular Value Index", fontsize=12)
+    ax.set_ylabel("Magnitude (Log Scale)", fontsize=12)
+    
+    # Enhanced legend
+    ax.legend(loc='upper right', frameon=True, facecolor='white', framealpha=0.9)
+    ax.grid(True, which="both", ls='-', alpha=0.1)
+    
+    plt.show()
 
-    Returns:
-        A_k       rank-k approximation
-        residual  ||A - A_k||_F
-        s         singular values (descending order)
+def main():
+    # Parameters
+    M, N, RANK = 1000, 500, 40
+    SIGMA = 0.5  # Noise level
+    SEED = 2026
+    rng = np.random.default_rng(SEED)
 
-    Examples
-    --------
-    >>> A = np.diag([4., 3., 2., 1.])
-    >>> A_k, res, s = truncated_svd_approx(A, 2)
-    >>> np.allclose(s[:3], [4,3,2])
-    True
-    >>> np.allclose(A_k, np.diag([4.,3.,0.,0.]), atol=1e-13)
-    True
-    >>> np.isclose(res, np.sqrt(2**2 + 1**2))
-    True
-    """
-    m, n = A.shape
-    k_max = min(m, n)
-
-    if k <= 0:
-        raise ValueError("Target rank must be positive")
-
-    k_effective = min(k, k_max)
-
-    if k_effective < k:
-        warnings.warn(
-            f"Requested rank {k} reduced to {k_effective} due to matrix dimensions.",
-            UserWarning,
-            stacklevel=2,
-        )
-
-    # Use truncated SVD when it makes sense
-    if k_effective < min(m, n) * 0.6:  # heuristic: svds faster for small k
-        U, s, Vh = svds(A, k=k_effective, return_singular_vectors=True)
-        # svds returns ascending → flip
-        idx = np.argsort(-s)
-        s = s[idx]
-        U = U[:, idx]
-        Vh = Vh[idx, :]
-    else:
-        # full SVD safer / more accurate when k is large
-        U, s, Vh = svd(A, full_matrices=False)
-
-    A_k = U[:, :k_effective] @ np.diag(s[:k_effective]) @ Vh[:k_effective, :]
-    residual = np.linalg.norm(A - A_k, ord="fro")
-
-    return A_k, residual, s
-
-
-def plot_singular_spectrum(
-    s: np.ndarray,
-    target_rank: int,
-    save_path: Optional[str] = None,
-    show: bool = True,
-) -> None:
-    """Plot singular values on log scale with target rank line."""
-    fig, ax = plt.subplots(figsize=(10, 5.5))
-    ax.semilogy(s, "o-", lw=1.3, ms=5, mec="w", mew=0.8)
-    ax.axvline(target_rank - 0.5, c="C1", ls="--", lw=1.8, alpha=0.9,
-               label=f"target rank = {target_rank}")
-    ax.set_xlabel("Singular value index")
-    ax.set_ylabel("Singular value (log scale)")
-    ax.set_title("Singular Value Spectrum")
-    ax.grid(True, which="both", ls=":", alpha=0.4)
-    ax.legend(frameon=True, fancybox=True, shadow=True)
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path, dpi=180, bbox_inches="tight")
-    if show:
-        plt.show()
-    plt.close(fig)
-
-
-def run_demo(
-    m: int = 1800,
-    n: int = 600,
-    true_rank: int = 32,
-    target_rank: int = 32,
-    noise_std: float = 0.015,
-    seed: Optional[int] = 20260202,
-    show_plot: bool = True,
-    save_plot: Optional[str] = None,
-) -> None:
-    """Execute full low-rank approximation demo."""
-    print("\nLow-Rank SVD Demo (with Gaussian noise)")
-    print("─" * 50)
-
-    A, L_clean = generate_low_rank_matrix(m, n, true_rank, noise_std, seed)
-
-    A_k, residual, s = truncated_svd_approx(A, target_rank)
-
-    norm_A = np.linalg.norm(A, ord="fro")
-    norm_L = np.linalg.norm(L_clean, ord="fro")
-
-    rel_err_A = residual / norm_A
-    rel_err_L = residual / norm_L if norm_L > 0 else float("nan")
-
-    print(f"Matrix shape        : {m} × {n}")
-    print(f"True (clean) rank   : {true_rank}")
-    print(f"Target rank         : {target_rank}")
-    print(f"Noise std (σ)       : {noise_std}")
-    print(f"Frobenius residual  : {residual:.4e}")
-    print(f"Relative error w.r.t. noisy A : {rel_err_A:.4e}  ({rel_err_A*100:.2f}%)")
-    print(f"Relative error w.r.t. clean L : {rel_err_L:.4e}  ({rel_err_L*100:.2f}%)")
-    print()
-
-    if show_plot or save_plot:
-        plot_singular_spectrum(s, target_rank, save_path=save_plot, show=show_plot)
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Low-rank SVD approximation demo with Gaussian noise",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument("--m", type=int, default=1800, help="rows")
-    parser.add_argument("--n", type=int, default=600, help="columns")
-    parser.add_argument("--true-rank", type=int, default=32, help="rank of clean signal")
-    parser.add_argument("--target-rank", type=int, default=32, help="desired approximation rank")
-    parser.add_argument("--noise", type=float, default=0.015, help="Gaussian noise std")
-    parser.add_argument("--seed", type=int, default=20260202, help="random seed (-1 = none)")
-    parser.add_argument("--no-plot", action="store_true", help="disable interactive plot")
-    parser.add_argument("--save-plot", type=str, default=None, help="save plot to this path (pdf/png)")
-    args = parser.parse_args()
-
-    seed = args.seed if args.seed >= 0 else None
-
-    try:
-        run_demo(
-            m=args.m,
-            n=args.n,
-            true_rank=args.true_rank,
-            target_rank=args.target_rank,
-            noise_std=args.noise,
-            seed=seed,
-            show_plot=not args.no_plot,
-            save_plot=args.save_plot,
-        )
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-
+    # 1. Generate Data
+    A, L_clean = generate_low_rank_matrix(M, N, RANK, SIGMA, rng)
+    
+    # 2. Compute Spectrum
+    # We use full SVD here to see the "tail" of the noise
+    U, s, Vh = svd(A, full_matrices=False)
+    
+    # 3. Apply Gavish-Donoho Denoising
+    tau = get_optimal_threshold(M, N, SIGMA)
+    rank_est = np.sum(s > tau)
+    
+    # 4. Reconstruct
+    s_thresh = s.copy()
+    s_thresh[s <= tau] = 0  # Hard thresholding
+    A_denoised = (U[:, :rank_est] * s[:rank_est]) @ Vh[:rank_est, :]
+    
+    # 5. Metrics
+    error = np.linalg.norm(L_clean - A_denoised, ord='fro')
+    
+    print(f"\n--- SVD Denoising Report ---")
+    print(f"Matrix Size      : {M} x {N}")
+    print(f"True Signal Rank : {RANK}")
+    print(f"Estimated Rank   : {rank_est}")
+    print(f"Threshold (τ)    : {tau:.4f}")
+    print(f"Frobenius Error  : {error:.4f}")
+    print(f"----------------------------\n")
+    
+    plot_results(s, tau, RANK, rank_est)
 
 if __name__ == "__main__":
     main()
